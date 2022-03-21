@@ -57,9 +57,9 @@ params <- map(symbols, function(x) {
   rets <- log(data) |>
     diff() |>
     na.trim()
-  rets_ <- (rets - mean(rets, na.rm = TRUE)) / sd(rets, na.rm = TRUE)
+  rets <- (rets - mean(rets, na.rm = TRUE)) # / sd(rets, na.rm = TRUE)
   mod <- garchFit(
-    data = rets_, include.mean = FALSE, cond.dist = "QMLE",
+    data = rets, include.mean = FALSE, cond.dist = "QMLE",
     trace = FALSE
   )
   params <- coef(mod)
