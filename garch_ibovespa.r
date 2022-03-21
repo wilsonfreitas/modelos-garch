@@ -57,21 +57,21 @@ params <- map(symbols, function(x) {
   rets <- log(data) |>
     diff() |>
     na.trim()
-  rets <- (rets - mean(rets, na.rm = TRUE)) / sd(rets, na.rm = TRUE)
+  rets_ <- (rets - mean(rets, na.rm = TRUE)) / sd(rets, na.rm = TRUE)
   mod <- garchFit(
-    data = rets, include.mean = FALSE, cond.dist = "QMLE",
+    data = rets_, include.mean = FALSE, cond.dist = "QMLE",
     trace = FALSE
   )
   params <- coef(mod)
   ltv <- params["omega"] / (1 - params["alpha1"] - params["beta1"])
-  v0 <- 
+  # v0 <- 
   tibble(
     symbol = x,
     omega = params["omega"],
     alpha1 = params["alpha1"],
     beta1 = params["beta1"],
-    ltv = sqrt(ltv * 252),
-    usd = sqrt(var(rets, na.rm = FALSE) * 252)
+    ltv = 100 * sqrt(ltv * 252),
+    usd = 100 * sqrt(var(rets, na.rm = FALSE) * 252)
   )
 })
 
