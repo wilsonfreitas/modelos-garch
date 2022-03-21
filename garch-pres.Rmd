@@ -1,0 +1,410 @@
+---
+title: "Modelos GARCH"
+author: "Wilson Freitas"
+bibliography: garch.bib
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introdução
+
+## Introdução
+
+O objetivo é apresentar os modelos da família GARCH demonstrando a formulação básica e chegando até a estimação de parâmetros.
+Na prática estes modelos tem origem no modelo ARCH proposto por [@Engle:1982uv], onde GARCH  é uma evolução proposta por [@Bollerslev:1986to].
+Neste documento todos estes modelos serão chamados de GARCH por simplificação.
+
+Um ponto sobre estes modelos é que eles são citados como modelos de volatilidade, no entanto, a volatilidade de uma série temporal não é observada.
+Na prática os modelos GARCH são aplicados a séries retornos financeiros (tipicamente estacionárias de primeira ordem) onde a volatilidade da série tem um componente autoregressivo e daí é que vem a referência a modelagem de volatilidade para estes modelos.
+Dessa forma, ao longo do texto os modelos serão aplicados a séries $r_t$ que tipicamente são séries de retorno.
+
+# Modelo ARCH
+
+## Modelo ARCH
+
+O modelo ARCH segue
+
+$$
+r_t = \sqrt{h_t} e_t
+$$
+
+e
+
+$$
+h_t = \omega + \sum_{i=1}^p \alpha_i r^2_{t-i}
+$$
+
+onde $h_t$ é a variância de $r_t$ e $e_t$ são os incrementos aleatórios com
+
+- $\mathrm{E}[e_t] = 0$
+- $\mathrm{E}[e^2_t] = 1$
+- $\mathrm{E}[e_s e_t] = 0$ para qualquer $s \neq t$
+
+que como veremos podem assumir diferentes distribuições.
+
+---
+
+A variância em $h_t$ depende de retornos em $t-1, t-2, t-3, ...$, por isso este modelo é dito autoregressivo na variância.
+Esta é a definição de um modelo ARCH de ordem $p$ que considera $p$ termos autoregressivos de $r_t$ na variância, de forma simplificada denomina-se ARCH(p).
+
+Nota: não está sendo considerada a forma mais geral do modelo ARCH(p) em que se tem ainda um termo de média do processo.
+
+## Esperanças incondicionais
+
+Dada a definição de ARCH temos as esperanças incondicionais
+
+$$
+\begin{aligned}
+\mathrm{E}\,r_t & = \mathrm{E}\,\sqrt{h_t} e_t \\
+                & = \mathrm{E}\,\sqrt{h_t}\,\mathrm{E}\,e_t \\
+                & = 0
+\end{aligned}
+$$
+
+$$
+\begin{aligned}
+\mathrm{E}\,r^2_t & = \mathrm{E}\,h_t e^2_t \\
+& = \mathrm{E}\,h_t \mathrm{E}\,e^2_t \\
+& = \mathrm{E}\,h_t \\
+& = \omega + \sum_{i=1}^p \alpha_{i} \mathrm{E}\,r^2_{t-i}
+\end{aligned}
+$$
+
+---
+
+Com $\mathrm{E}\,r_t = 0$ podemos escrever
+
+$$
+\mathrm{Var}\,r_t = \mathrm{E}\,r^2_t
+$$
+
+Assim o resultado acima pode ser escrito como
+
+$$
+\mathrm{Var}\,r_t = \omega + \sum_{i=1}^p \alpha_{i} \mathrm{Var}\,r_{t-i}
+$$
+
+e como $r_t$ é um processo estacionário $\mathrm{Var}\,r_t = \mathrm{Var}\,r_s$ para qualquer $s$.
+Portanto,
+
+$$
+\begin{aligned}
+\mathrm{Var}\,r_t & = \omega + \sum_{i=1}^p \alpha_{i} \mathrm{Var}\,r_t \\
+& = \frac{\omega}{1 - \sum_{i=1}^p \alpha_{i}}
+\end{aligned}
+$$
+
+---
+
+É importante notar que para chegar a estes resultados estamos assumindo que
+
+- $\mathrm{E}[\sqrt{h_t} e_t] = \mathrm{E}[\sqrt{h_t}] \mathrm{E}[e_t]$ e
+- $\mathrm{E}[h_t e^2_t] = \mathrm{E}[h_t] \mathrm{E}[e^2_t]$
+
+ou seja, $\sqrt{h_t}$ é independente de $e_t$ e $h_t$ é independente de $e^2_t$.
+Talvez devesse desenvolver melhor este argumento.
+
+## Esperanças condicionais
+
+Se considerarmos as esperanças condicionadas à informação até o instante $t-1$ temos:
+
+$$
+\begin{aligned}
+\mathrm{E}_{t-1}[r_t] & = \mathrm{E}[r_t | I_{t-1}] \\
+& = \mathrm{E}[\sqrt{h_t} e_t | I_{t-1}] \\
+& = \mathrm{E}[\sqrt{h_t} | I_{t-1}] \, \mathrm{E}[e_t | I_{t-1}] \\
+& = \sqrt{ h_t } \, \mathrm{E}[e_t | I_{t-1}] \\
+& = 0
+\end{aligned}
+$$
+
+$$
+\begin{aligned}
+\mathrm{E}_{t-1}[r^2_t] & = \mathrm{E}[r^2_t | I_{t-1}] \\
+& = \mathrm{E}[h_t e^2_t | I_{t-1}] \\
+& = \mathrm{E}[h_t | I_{t-1}] \, \mathrm{E}[e^2_t | I_{t-1}] \\
+& = h_t | I_{t-1}
+\end{aligned}
+$$
+
+---
+
+Note que $h_t | I_{t-1}$ não tem componente aleatória, é dado pelas realizações passadas de $r_t$, ou seja, é um escalar.
+
+## Escrevendo ARCH com um AR
+
+Nas seções anteriores demonstrou-se que $\mathrm{E}_{t-1}[r^2_t] = h_t | I_{t-1}$.
+Usando este resultado define-se a variável $u_t$ como:
+
+$$
+\begin{aligned}
+u_t & = r^2_t - \mathrm{E}_{t-1}[r^2_t] \\
+& = r^2_t - h_t
+\end{aligned}
+$$
+
+onde $u_t$ é o erro na esperança condicional.
+Note que na equação acima foi colocado $h_t | I_t \equiv h_t$ para não carregar a notação e que $u_t$ tem esperança condicional zero $\mathrm{E}_{t-1}\,u_t = 0$.
+
+---
+
+Reescrevendo a equação de $u_t$ como
+
+$$
+\begin{aligned}
+r^2_t & = h_t + u_t \\
+& = \omega + \sum_{i=1}^p \alpha_i r^2_{t-1} + u_t
+\end{aligned}
+$$
+
+obtem-se uma equação de $r^2_t$ como um processo AR(p).
+
+# Modelo GARCH
+
+## Modelo GARCH
+
+O GARCH é uma estensão do ARCH proposta por [@Bollerslev:1986to], onde uma componente autoregressiva da variância é introduzida na equação da variância.
+Dessa forma, a variância $h_t$ passa a ter termos com retornos e variância passados.
+
+$$
+r_t = \mu_t + \sqrt{h_t} e_t
+$$
+
+e
+
+$$
+h_t = \omega + \sum_{i=1}^p \alpha_i r^2_{t-i} + \sum_{i=1}^q \beta_i h_{t-i}
+$$
+
+## Esperança incondicional
+
+$$
+\begin{aligned}
+\mathrm{E}\,r_t & = 0 \\
+& \\
+\mathrm{E}\,r^2_t & = \mathrm{E}\,h_t \\
+& = \omega + \sum_{i=1}^p \alpha_i \mathrm{E}\,r^2_{t-i} + \sum_{i=1}^q \beta_i \mathrm{E}\,h_{t-i} \\
+& = \omega + \sum_{i=1}^p \alpha_i \mathrm{E}\,r^2_{t-i} + \sum_{i=1}^q \beta_i \mathrm{E}\,r^2_{t-i} \\
+& = \omega + \mathrm{E}\,r^2_t\, \left( \sum_{i=1}^p \alpha_i + \sum_{i=1}^q \beta_i \right) \\
+& = \frac{\omega}{1 - \sum_{i=1}^p \alpha_i - \sum_{i=1}^q \beta_i} \\
+& \equiv \mathrm{Var}\,r_t
+\end{aligned}
+$$
+
+---
+
+Esta formulação é uma generalização porque permite que para $\beta_i = 0$ se retorne a formulação ARCH(p).
+
+Da mesma forma que um modelo ARMA(1,1) pode ser escrito como um modelo AR($\infty$), um modelo GARCH(1,1) pode ser escrito como um modelo ARCH($\infty$),
+
+$$
+\begin{aligned}
+h_t & = \omega + \alpha_1 r^2_{t-1} + \beta_1 h_{t-1} \\
+& = \omega + \alpha_1 r^2_{t-1} + \beta_1 (\omega + \alpha_1 r^2_{t-2} + \beta_1 h_{t-2}) \\
+& = \omega (1 + \beta_1) + \alpha_1 (r^2_{t-1} + \beta_1 r^2_{t-2}) + \beta^2_1 h_{t-2} \\
+& = \omega (1 + \beta_1 + \beta_1^2) + \alpha_1 (r^2_{t-1} + \beta_1 r^2_{t-2} + \beta_1^2 r^2_{t-2}) + \beta^3_1 h_{t-3} \\
+& \vdots \\
+& = \frac{\omega}{1 - \beta_1} + \alpha_1 \sum_{i=0}^\infty r^2_{t-1-i} \beta_1^i
+\end{aligned}
+$$
+
+---
+
+Assim, um modelo GARCH de baixa ordem deve ter propriedades similares a modelos ARCH de alta ordem, com isso evitando os problemas inerentes a estimação de parâmetros sujeitos a restrições de não-negatividade.
+
+Alguns trabalhos sugerem a utilização de um decaimento linear para os coeficientes do modelo ARCH, de forma que os únicos parâmetros sejam a ordem $p$ do modelo e a somatória dos coeficientes.
+Mesmo assim o modelo GARCH é uma solução mais parsimoniosa e natural ao modelo ARCH uma vez que a estimação de parâmetros ainda é mais simples e produz resultados melhores.
+
+## Esperança condicional
+
+$$
+\begin{aligned}
+\mathrm{E}_{t-1}\,r_t   & = 0 \\
+\mathrm{Var}_{t-1}\,r_t & = h_t \\
+& = \omega + \sum_{i=1}^p \alpha_i r^2_{t-i} + \sum_{i=1}^p \beta_i h_{t-i} \\
+& = \omega + \alpha(L)r^2_t + \beta(L) h_t
+\end{aligned}
+$$
+
+## Escrevendo GARCH com um ARMA
+
+Seja
+
+$$
+\begin{aligned}
+u_t & = r^2_t - \mathrm{E}_{t-1}\,r^2_t \\
+& = r^2_t - h_t \\
+& = r^2_t - \omega - \sum_{i=1}^p \alpha_i r^2_{t-i} - \sum_{i=1}^q \beta_i h_{t-i} \\
+& = r^2_t - \omega - \sum_{i=1}^p \alpha_i r^2_{t-i} - \sum_{i=1}^q \beta_i (r^2_{t-i} - u_{t-i}) \\
+& = r^2_t - \omega - \sum_{i=1}^p \alpha_i r^2_{t-i} - \sum_{i=1}^q \beta_i r^2_{t-i} + \sum_{i=1}^q \beta_i u_{t-i} \\
+\end{aligned}
+$$
+
+---
+
+$$
+\begin{aligned}
+r^2_t & = \omega + \sum_{i=1}^p \alpha_i r^2_{t-i} + \sum_{i=1}^q \beta_i r^2_{t-i} + u_t - \sum_{i=1}^q \beta_i u_{t-i} \\
+& = \omega + \sum_{i=1}^{\max(p,q)} \left( \alpha_i + \beta_i \right)r^2_{t-i} + u_t - \sum_{i=1}^q \beta_i u_{t-i} \\
+\end{aligned}
+$$
+
+onde tem-se um ARMA(p,q) e $p\equiv\max(p,q)$.
+
+# Modelo EWMA ou IGARCH(1,1)
+
+## Modelo EWMA ou IGARCH(1,1)
+
+Considere um processo GARCH(1,1) onde
+
+$$
+h_t = \omega + \alpha r^2_{t-1} + \beta h_{t-1}
+$$
+
+Foi visto anteriormente que a variância incondicional de $r^2_t$ nesse processo é dada por
+
+$$
+\mathrm{Var}\,r_t^2 = \frac{\omega}{1 - \alpha - \beta}
+$$
+
+onde surge como restrição a equação: $1 - \alpha - \beta \ge 0$.
+
+---
+
+Ao considerar o limite dessa restrição chega-se a $\alpha + \beta = 1$ onde pode-se reduzir a uma única variável assumindo $\alpha = 1-\lambda$ e $\beta = \lambda$.
+Neste contexto a variância incondicional de $r_t^2$ diverge e o processo passa a ser não estacionário.
+
+A equação da variância condicional
+
+$$
+h_t = \omega + (1 - \lambda) r^2_{t-1} + \lambda h_{t-1}
+$$
+
+é denominada IGARCH(1,1) ou EWMA (Exponentially Weighted Moving Average)
+
+## Esperança incondicional
+
+$$
+\begin{aligned}
+\mathrm{E}\,r_t & = 0 \\
+& \\
+\mathrm{E}\,r^2_t & = \mathrm{E}\,h_t \\
+& = \omega + (1 - \lambda) \mathrm{E}\,r^2_{t-1} + \lambda \mathrm{E}\,h_{t-1} \\
+& = \omega + (1 - \lambda) \mathrm{E}\,r^2_{t-1} + \lambda \mathrm{E}\,r^2_{t-1} \\
+& = \omega + \mathrm{E}\,r^2_{t-1} \\
+& \\
+\mathrm{E}\,r^2_{t} - \mathrm{E}\,r^2_{t-1} = \omega
+\end{aligned}
+$$
+
+Dado que $r^2_t$ é não estacionário essa análise não me diz muito nesse momento.
+
+## Esperança condicional
+
+$$
+\begin{aligned}
+\mathrm{E}_{t-1}[r_t] & = \mathrm{E}[r_t | I_{t-1}] \\
+& = \mathrm{E}[\sqrt{h_t} e_t | I_{t-1}] \\
+& = \mathrm{E}[\sqrt{h_t} | I_{t-1}] \, \mathrm{E}[e_t | I_{t-1}] \\
+& = \sqrt{ h_t } \, \mathrm{E}[e_t | I_{t-1}] \\
+& = 0
+\end{aligned}
+$$
+
+$$
+\begin{aligned}
+\mathrm{E}_{t-1}[r^2_t] & = h_t | I_{t-1} \\
+& = \omega + (1 - \lambda) r^2_{t-1} + \lambda h_{t-1} | I_{t-1} \\
+\end{aligned}
+$$
+
+## Análise com o erro da esperança condicional
+
+$$
+\begin{aligned}
+u_t & = r^2_t - \mathrm{E}_{t-1}\,r^2_t \\
+& = r^2_t - h_t \\
+& = r^2_t - \omega - (1 - \lambda) r^2_{t-1} - \lambda h_{t-1} \\
+& = r^2_t - \omega - (1 - \lambda) r^2_{t-1} - \lambda (r^2_{t-1} - u_{t-1}) \\
+& = r^2_t - r^2_{t-1} - \omega - \lambda u_{t-1} \\
+& \\
+r^2_t - r^2_{t-1} & = \omega + u_t - \lambda u_{t-1}
+\end{aligned}
+$$
+
+---
+
+Posto dessa forma, o processo de $r^2_t$ não é estacionário, como já mencionado anteriormente.
+$r^2_t$ é um processo integrado de orderm 1 pois a sua primeira diferença gera um processo estacionário.
+O processo de $r^2_t$ tem características de um *random walk*.
+Assumindo $r^2_0$ constante o processo pode ser reescrito como:
+
+$$
+r^2_t = r^2_0 + \sum_{i=1}^t (u_i - \lambda u_{i-1})
+$$
+
+---
+
+assim
+
+$$
+\mathrm{E}\,r^2_t = r^2_t
+$$
+
+$$
+\begin{aligned}
+\mathrm{Var}\,r^2_t & = \sum_{i=1}^t \mathrm{Var}\,(u_i - \lambda u_{i-1}) \\
+& = (1 + \lambda^2) t \mathrm{Var}\,u_i
+\end{aligned}
+$$
+
+que é claramente dependente de $t$ e portanto o processo $r^2_t$ é não estacionário.
+
+# Processos Integrados
+
+## Processos Integrados
+
+$x_t$ é um processo integrado de ordem 1, notado por $x_t \sim I(1)$, se tem a forma
+
+$$
+x_t = x_{t-1} + u_t
+$$
+
+onde $u_t$ é uma série temporal estacionária.
+Claramente tem-se que:
+
+$$
+\Delta x_t = u_t
+$$
+
+é estacionário (seguindo definição de $u_t$).
+
+---
+
+Acumulando processo $x_t$ desde a origem $x_0$ tem-se
+
+$$
+y_t = y_0 + \sum_{i=1}^t u_i
+$$
+
+e o somatório de $u_i$ representa a tendência estocástica do processo.
+
+---
+
+Se $u_t \sim \mathrm{N}(0,\sigma^2)$  então $x_t$ é chamado de *random walk* (RW).
+Se $x_t$ é RW e assumindo $x_0$ constante tem-se:
+
+$$
+\begin{aligned}
+\mathrm{E}\,x_t & = x_0 \\
+\mathrm{Var}\,x_t & = \sigma^2 t \\
+\mathrm{Cov}\,(x_t,x_{t-s}) & = (t-s)\sigma^2 \\
+\mathrm{Cor}\,(x_t,x_{t-s}) & = \sqrt{\frac{t-s}{t}} \\
+\end{aligned}
+$$
+
+## Referências
+
