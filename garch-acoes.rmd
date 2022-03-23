@@ -1,0 +1,214 @@
+---
+title: "GARCH em Ações"
+author: "Wilson Freitas"
+bibliography: garch.bib
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(fGarch)
+library(xts)
+library(quantmod)
+library(purrr)
+library(readr)
+library(stringr)
+library(dplyr)
+library(ggplot2)
+library(forcats)
+```
+
+```{r message=FALSE, warning=FALSE}
+bvsp <- getSymbols("^BVSP",
+  auto.assign = FALSE,
+  from = "2015-01-01", to = "2021-12-31"
+) |> Ad()
+
+bvsp_rets <- log(bvsp) |>
+  diff() |>
+  na.omit()
+```
+
+```{r}
+plot(bvsp_rets, col = "red")
+```
+
+# Modelo GARCH
+
+$$
+r_t = \sqrt{h_t} e_t
+$$
+
+e
+
+$$
+h_t = \omega + \sum_{i=1}^p \alpha_i r^2_{t-i} + \sum_{i=1}^q \beta_i h_{t-i}
+$$
+
+```{r message=FALSE, warning=FALSE}
+mod <- garchFit(~ garch(1, 1), data = bvsp_rets, trace = FALSE)
+```
+
+```{r}
+summary(mod)
+```
+
+## Os resíduos
+
+Os resíduos são padronizados, pois:
+
+$$
+e_t = \frac{r_t}{\sqrt{h_t}}
+$$
+
+```{r}
+plot(residuals(mod, standardize = TRUE),
+  type = "l", col = "red",
+  main = "Resíduos padronizados", ylab = ""
+)
+```
+
+# IBOVESPA
+
+Vamos calcular o GARCH para todas as ações que compõem o IBOVESPA.
+
+[comp-ibovespa]: https://www.b3.com.br/pt_br/market-data-e-indices/indices/indices-amplos/indice-ibovespa-ibovespa-composicao-da-carteira.htm
+
+A composição da carteira do IBOVESPA pode ser obtido no site da [B3][comp-ibovespa].
+
+```{r message=FALSE, warning=FALSE}
+symbols <- read_delim("IBOVDia_21-03-22.csv",
+  skip = 1,
+  delim = ";",
+  locale = locale(encoding = "latin1"),
+) |>
+  filter(!is.na(`Ação`)) |>
+  pull(`Código`) |>
+  paste0(".SA")
+```
+
+Pegar dados 3 anos de dados
+
+```{r get-symbols, cache=TRUE, message=FALSE, warning=FALSE}
+series <- map(symbols, function(x) {
+  x <- getSymbols(x,
+    auto.assign = FALSE,
+    from = "2019-01-01",
+    to = "2021-12-31"
+  )
+  Ad(x)
+})
+
+series <- set_names(series, symbols)
+```
+
+Calculando os parâmetros dos modelos
+
+```{r message=FALSE, warning=FALSE}
+models <- map(symbols, function(x) {
+  data <- series[[x]]
+  rets <- log(data) |>
+    diff() |>
+    na.omit()
+  garchFit(data = rets, trace = FALSE)
+})
+models <- set_names(models, symbols)
+```
+
+```{r message=FALSE, warning=FALSE}
+params <- map_dfr(symbols, function(x) {
+  mod <- models[[x]]
+  params <- coef(mod)
+  sv <- sqrt(var(mod@data, na.rm = FALSE) * 252) |> as.numeric()
+  v0 <- sum(params[-1] * c(1, tail(mod@data, 1)^2, tail(mod@h.t, 1))) * 252
+  tibble(
+    symbol = x,
+    length = length(mod@data),
+    omega = params["omega"],
+    alpha1 = params["alpha1"],
+    beta1 = params["beta1"],
+    check = alpha1 + beta1 < 1,
+    instant_volatility = 100 * sqrt(v0),
+    sample_volatility = 100 * sv
+  )
+})
+```
+
+```{r}
+params
+```
+
+```{r}
+params |> filter(!check)
+```
+
+```{r}
+plot(series[["BRAP4.SA"]])
+```
+
+```{r fig.height=12}
+params |>
+  ggplot(aes(y = fct_reorder(symbol, beta1), x = beta1, colour = check)) +
+  geom_point() +
+  labs(y = "Symbols")
+```
+
+
+```{r}
+params |> filter(beta1 < 0.5)
+```
+
+## Volatilidade de Longo Prazo
+
+A variância incondicional é dada por:
+
+$$
+\mathrm{Var}\,r_t = \frac{\omega}{1 - \alpha_1 - \beta_1}
+$$
+
+```{r message=FALSE, warning=FALSE}
+params <- params |>
+  mutate(
+    lt_variance = omega / (1 - alpha1 - beta1),
+    lt_volatility = 100 * sqrt(lt_variance * 252)
+  ) |>
+  select(-lt_variance)
+```
+
+```{r}
+params
+```
+
+```{r lt-vols, cache=TRUE, message=FALSE, warning=FALSE}
+lt_vols <- rollapply(bvsp_rets, 756, function(x) {
+  mod <- garchFit(~ garch(1, 1), data = x, trace = FALSE)
+  params <- coef(mod)
+  lt_variance <- params["omega"] / (1 - params["alpha1"] - params["beta1"])
+  100 * sqrt(lt_variance * 252)
+}, align = "right")
+```
+
+```{r}
+sample_vols <- rollapply(bvsp_rets, 756, function(x) {
+  v <- sqrt(var(x, na.rm = FALSE) * 252) |> as.numeric()
+  100 * v
+}, align = "right")
+```
+
+```{r}
+vols <- merge(lt_vols, sample_vols)
+colnames(vols) <- c("long term vol", "sample vol")
+```
+
+```{r}
+plot(vols |> na.omit(),
+  legend.loc = "topleft",
+  main = "Volatilidade do IBOVESPA em Janela Móvel"
+)
+```
+
+## Estrutura a Termo de Volatilidade
+

@@ -9,50 +9,46 @@ library(dplyr)
 library(ggplot2)
 library(forcats)
 
-df <- read_delim("IBOVDia_21-03-22.csv",
+bvsp <- getSymbols("^BVSP",
+  auto.assign = FALSE,
+  from = "2015-01-01", to = "2021-12-31"
+) |> Ad()
+
+bvsp_rets <- log(bvsp) |>
+  diff() |>
+  na.omit()
+# bvsp_rets <- (bvsp_rets - mean(bvsp_rets, na.rm = TRUE))
+mod <- garchFit(
+  BVSP.Adjusted ~ garch(1, 1), data = 100 * bvsp_rets, trace = FALSE
+)
+mod
+
+plot(residuals(mod), type = "l")
+plot(mod@residuals, type = "l", col = "red")
+summary(mod)
+
+
+# https://www.b3.com.br/pt_br/market-data-e-indices/indices/indices-amplos/indice-ibovespa-ibovespa-composicao-da-carteira.htm
+
+symbols <- read_delim("IBOVDia_21-03-22.csv",
   skip = 1,
   delim = ";",
-  locale = locale(decimal_mark = ",", grouping_mark = ".", encoding = "latin1"),
-  col_types = cols(
-    `Código` = col_character(),
-    `Ação` = col_character(),
-    Tipo = col_character(),
-    `Qtde. Teórica` = col_character(),
-    `Part. (%)` = col_character()
-  )
-)
+  locale = locale(encoding = "latin1"),
+) |>
+  filter(!is.na(`Ação`)) |>
+  pull(`Código`) |>
+  paste0(".SA")
 
-df <- df |>
-  rename(
-    Qtde = `Qtde. Teórica`, `Percent` = `Part. (%)`,
-    Symbol = `Código`
-  ) |>
-  mutate(
-    Qtde = str_replace_all(Qtde, "\\.", "") |> as.numeric(),
-    Percent = str_replace(Percent, ";", "") |>
-      str_replace(",", ".") |>
-      as.numeric(),
-  ) |>
-  dplyr::filter(!is.na(`Ação`))
-
-symbols <- paste0(df$Symbol, ".SA")
-
+# pegar dados desde 2019 para ter aprox 3 anos de dados
 series <- map(symbols, function(x) {
-  cat(x, "\n")
   x <- getSymbols(x, auto.assign = FALSE, from = "2019-01-01")
+  cat(x, length(x), "\n")
   Ad(x)
 })
 
 series <- set_names(series, symbols)
 
-rets <- series |> map(function(x) {
-  rets <- log(x) |> diff()
-  na.trim(rets)
-})
-
-rets <- set_names(rets, symbols)
-
-params <- map(symbols, function(x) {
+params <- map_dfr(symbols, function(x) {
   data <- series[[x]]
   rets <- log(data) |>
     diff() |>
@@ -64,34 +60,40 @@ params <- map(symbols, function(x) {
   )
   params <- coef(mod)
   ltv <- params["omega"] / (1 - params["alpha1"] - params["beta1"])
-  # v0 <- 
+  unv <- sqrt(var(rets, na.rm = FALSE) * 252) |> as.numeric()
+  # v0 <-
   tibble(
     symbol = x,
     omega = params["omega"],
     alpha1 = params["alpha1"],
     beta1 = params["beta1"],
+    check = alpha1 + beta1 < 1,
     ltv = 100 * sqrt(ltv * 252),
-    usd = 100 * sqrt(var(rets, na.rm = FALSE) * 252)
+    unv = 100 * unv
   )
 })
-
-params <- do.call(rbind, params)
 
 params |>
-  ggplot(aes(y = fct_reorder(symbol, beta1), x = beta1)) +
-  geom_point()
+  ggplot(aes(y = fct_reorder(symbol, beta1), x = beta1, colour = check)) +
+  geom_point() +
+  labs(y = "Symbols")
 
+params |> filter(!check)
 
-params <- params |> mutate(check = alpha1 + beta1)
+bad_symbols <- params |>
+  filter(beta1 < 0.6) |>
+  pull(symbol)
 
-params |> dplyr::filter(check >= 1)
+bad_symbols |>
+  map_dfr(function(x) {
+    tibble(
+      symbol = x,
+      length = length(series[[x]]),
+      nas = sum(is.na(series[[x]]))
+    )
+  }) |>
+  arrange(length)
 
-bad_symbols <- params |> dplyr::filter(beta1 < 0.75) |> pull(symbol)
+params |> filter(symbol %in% bad_symbols)
 
-bad_symbols |> map(function(x) {
-  tibble(
-    symbol = x,
-    length = length(series[[x]]),
-    nas = sum(is.na(series[[x]]))
-  )
-})
+plot(series[["PETR3.SA"]])
