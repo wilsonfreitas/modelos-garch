@@ -212,3 +212,46 @@ plot(vols |> na.omit(),
 
 ## Estrutura a Termo de Volatilidade
 
+$$
+a = \ln \frac{1}{\alpha_1 + \beta_1}
+$$
+
+$$
+h_T = 252\left( V_L + \frac{1 - e^{-aT}}{aT}(V(0) - V_L) \right)
+$$
+
+```{r}
+vts <- function(t, params) {
+  a <- log(1 / (params$alpha1 + params$beta1))
+  V_L <- ((params$lt_volatility / 100)**2) / 252
+  V_0 <- ((params$instant_volatility / 100)**2) / 252
+  100 * sqrt(252 * (V_L + (V_0 - V_L) * (1 - exp(-a * t)) / (a * t)))
+}
+```
+
+```{r}
+stock_symbol <- "ABEV3.SA"
+symbol_params <- params |> filter(symbol == stock_symbol)
+
+t <- 1:252
+x <- vts(t, symbol_params)
+plot(t, x,
+  type = "l", main = paste("Estrutura a Termo de Volatilidade", stock_symbol),
+  ylab = "Volatilidade (%)", xlab = ""
+)
+abline(h = symbol_params$lt_volatility, lty = "dashed")
+```
+
+```{r}
+stock_symbol <- "MGLU3.SA"
+symbol_params <- params |> filter(symbol == stock_symbol)
+
+t <- 1:252
+x <- vts(t, symbol_params)
+plot(t, x,
+  type = "l", main = paste("Estrutura a Termo de Volatilidade", stock_symbol),
+  ylab = "Volatilidade (%)", xlab = "",
+  ylim = c(min(symbol_params$lt_volatility, x), max(symbol_params$lt_volatility, x))
+)
+abline(h = symbol_params$lt_volatility, lty = "dashed")
+```
