@@ -1,13 +1,28 @@
 ---
 title: "GARCH em Ações"
 author: "Wilson Freitas"
-bibliography: garch.bib
 output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+# Agenda
+
+- Análise da série de retornos do IBOVESPA.
+    - Visualização
+    - Autocorrelação
+    - Autocorrelação dos quadrados dos retornos
+- Modelo GARCH.
+- Modelo GARCH aplicado à série de retornos do IBOVESPA.
+- Análise dos resultados e dos resíduos.
+- Modelo GARCH aplicado às séries de retornos de ações que compõem o índice
+  IBOVESPA.
+- Análise dos ajustes massificados.
+- Volatilidade de Longo Prazo.
+- Estrutura a Termo de Volatilidade.
+
 
 ```{r message=FALSE, warning=FALSE}
 library(fGarch)
@@ -36,16 +51,42 @@ bvsp_rets <- log(bvsp) |>
 plot(bvsp_rets, col = "red")
 ```
 
+```{r}
+(bvsp_rets) |> Box.test(lag = 10)
+(bvsp_rets) |> Box.test(lag = 15)
+(bvsp_rets) |> Box.test(lag = 20)
+```
+
+```{r}
+(bvsp_rets ** 2) |> Box.test(lag = 10)
+(bvsp_rets ** 2) |> Box.test(lag = 15)
+(bvsp_rets ** 2) |> Box.test(lag = 20)
+```
+
+
 # Modelo GARCH
 
 $$
 r_t = \sqrt{h_t} e_t
 $$
 
-e
+onde $e_t$ é uma variável aleatória IID.
+Aqui vamos utilizar a distribuição Normal, mas podemos utilizar outras
+distribuições como t-Student, por exemplo.
+
+$h_t$ é o processo da variância e possui componente autoregressiva e
+dependência de $r^2_t$.
 
 $$
 h_t = \omega + \sum_{i=1}^p \alpha_i r^2_{t-i} + \sum_{i=1}^q \beta_i h_{t-i}
+$$
+
+## GARCH(1,1)
+
+Vamos fazer o ajuste da série de retornos do IBOVESPA para o GARCH(1,1)
+
+$$
+h_t = \omega + \alpha_1 r^2_{t-1} + \beta_1 h_{t-1}
 $$
 
 ```{r message=FALSE, warning=FALSE}
@@ -71,13 +112,45 @@ plot(residuals(mod, standardize = TRUE),
 )
 ```
 
+```{r}
+residuals(mod, standardize = TRUE) |> qqnorm()
+residuals(mod, standardize = TRUE) |> qqline(col = "red")
+```
+
+## Fatos Estilizados do GARCH
+
+Fatos estilizados são *coisas* que vêm de graça com o GARCH.
+
+### Curtose
+
+Bollerslev (1986) e Teräsvirta (1999) demostram que a curtose de um modelo
+GARCH(p,q) é superior a 3, curtose da distribuição Normal.
+
+### Reversão a Média
+
+É possível reescrever o GARCH como um ARMA, dessa maneira o processo de
+volatilidade é estacionário, assim a volatilidade evolui em torno de um valor
+médio.
+
+### *Volatility Clusters*
+
+O GARCH captura muito bem as propriedades autoregressivas da série.
+Por este motivo, os resíduos de um GARCH bem ajustado não apresentam
+autocorrelação significativa e nem a série de quadrados dos resíduos.
+Isso acontece pelo parâmetro $beta_1$ (para o GARCH(1,1), do nosso exemplo)
+apresentar um valor de 0.85, que dá um grande peso para $h_{t-1}$ que gera uma
+grande contribuição para $h_t$.
+Assim, grandes variâncias produzem novas grandes variâncias, e
+o mesmo acontece com pequenas variâncias.
+
 # IBOVESPA
 
 Vamos calcular o GARCH para todas as ações que compõem o IBOVESPA.
 
 [comp-ibovespa]: https://www.b3.com.br/pt_br/market-data-e-indices/indices/indices-amplos/indice-ibovespa-ibovespa-composicao-da-carteira.htm
 
-A composição da carteira do IBOVESPA pode ser obtido no site da [B3][comp-ibovespa].
+A composição da carteira do IBOVESPA pode ser obtido no site da
+[B3][comp-ibovespa].
 
 ```{r message=FALSE, warning=FALSE}
 symbols <- read_delim("IBOVDia_21-03-22.csv",
@@ -146,12 +219,20 @@ params |> filter(!check)
 ```
 
 ```{r}
-plot(series[["BRAP4.SA"]])
+plot(series[["BRAP4.SA"]], main = "BRAP4")
 ```
 
-```{r fig.height=12}
+```{r}
+plot(series[["IRBR3.SA"]], main = "IRBR3")
+```
+
+```{r}
+plot(series[["EMBR3.SA"]], main = "EMBR3")
+```
+
+```{r fig.height=10}
 params |>
-  ggplot(aes(y = fct_reorder(symbol, beta1), x = beta1, colour = check)) +
+  ggplot(aes(y = fct_reorder(symbol, beta1), x = beta1)) +
   geom_point() +
   labs(y = "Symbols")
 ```
